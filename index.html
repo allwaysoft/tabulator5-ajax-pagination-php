@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Tabulator Example</title>
+        <link href="css/tabulator.css" rel="stylesheet">
+        <script type="text/javascript" src="js/tabulator.js"></script>
+        <style>
+            /*Horizontally center header and footer*/
+            .tabulator-print-header, tabulator-print-footer{
+                text-align:center;
+            }
+        </style>
+    </head>
+
+    <body>
+
+
+
+        <div id="example-table"></div>
+
+        <script type="text/javascript">
+//Build Tabulator
+            var table = new Tabulator("#example-table", {
+                height: "311px",
+                layout: "fitColumns",
+                placeholder: "No Data Set",
+pagination:true, //enable pagination
+    paginationMode:"remote", //enable remote pagination
+                paginationSize: 5,
+                paginationInitialPage: 1,
+                ajaxURL: "ajaxfile.php", //set url for ajax request
+
+                columns: [
+
+                    
+                    {title: "emp_name", field: "emp_name"},
+                    {title: "email", field: "email"},
+                                        {title: "gender", field: "gender"},
+                    {title: "salary", field: "salary"},
+                                        {title: "city", field: "city"},
+
+                ],
+            });
+
+
+        </script>
+    </body>
+
+</html>
