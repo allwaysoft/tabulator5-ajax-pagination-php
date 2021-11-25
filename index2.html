@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Tabulator Example</title>
+        <link href="https://unpkg.com/tabulator-tables@5.0.7/dist/css/tabulator.min.css" rel="stylesheet">
+        <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.0.7/dist/js/tabulator.min.js"></script>
+        <script type="text/javascript" src="https://moment.github.io/luxon/global/luxon.min.js"></script>
+        <script type="text/javascript" src="https://oss.sheetjs.com/sheetjs/xlsx.full.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.20/jspdf.plugin.autotable.min.js"></script>
+        <style>
+            /*Horizontally center header and footer*/
+            .tabulator-print-header, tabulator-print-footer{
+                text-align:center;
+            }
+        </style>
+    </head>
+
+    <body>
+
+        <div>
+            <button id="print-table">Print Table</button>
+        </div>
+        <div>
+            <button id="history-undo">Undo Edit</button>
+            <button id="history-redo">Redo Edit</button>
+        </div>
+        <div>
+            <button id="download-csv">Download CSV</button>
+            <button id="download-json">Download JSON</button>
+            <button id="download-xlsx">Download XLSX</button>
+            <button id="download-pdf">Download PDF</button>
+            <button id="download-html">Download HTML</button>
+        </div>
+        <div>
+            <button id="add-row">Add Blank Row to bottom</button>
+            <button id="del-row">删除选中的行</button>
+            <button id="clear">Empty the table</button>
+            <button id="reset">Reset</button>
+        </div>
+        <div id="example-table"></div>
+        <div id="example-footer"></div>
+        <button id="save">Save</button>
+        <script type="text/javascript">
+            //define row context menu contents
+            var rowMenu = [
+                {
+                    label: "<i class='fas fa-user'></i> Change Name",
+                    action: function (e, row) {
+                        row.update({name: "Steve Bobberson"});
+                    }
+                },
+                {
+                    label: "<i class='fas fa-check-square'></i> Select Row",
+                    action: function (e, row) {
+                        row.select();
+                    }
+                },
+                {
+                    separator: true,
+                },
+                {
+                    label: "Admin Functions",
+                    menu: [
+                        {
+                            label: "<i class='fas fa-trash'></i> Delete Row",
+                            action: function (e, row) {
+                                console.log(row.getData());
+                                row.delete();
+                            }
+                        },
+                        {
+                            label: "<i class='fas fa-trash'></i> Save Row",
+                            action: function (e, row) {
+                                console.log(row.getData());
+
+                            }
+                        },
+                        {
+                            label: "<i class='fas fa-ban'></i> Disabled Option",
+                            disabled: true,
+                        },
+                    ]
+                }
+            ]
+
+//define column header menu as column visibility toggle
+            var headerMenu = function () {
+                var menu = [];
+                var columns = this.getColumns();
+
+                for (let column of columns) {
+
+                    //create checkbox element using font awesome icons
+                    let icon = document.createElement("i");
+                    icon.classList.add("fas");
+                    icon.classList.add(column.isVisible() ? "fa-check-square" : "fa-square");
+
+                    //build label
+                    let label = document.createElement("span");
+                    let title = document.createElement("span");
+
+                    title.textContent = " " + column.getDefinition().title;
+
+                    label.appendChild(icon);
+                    label.appendChild(title);
+
+                    //create menu item
+                    menu.push({
+                        label: label,
+                        action: function (e) {
+                            //prevent menu closing
+                            e.stopPropagation();
+
+                            //toggle current column visibility
+                            column.toggle();
+
+                            //change menu item icon
+                            if (column.isVisible()) {
+                                icon.classList.remove("fa-square");
+                                icon.classList.add("fa-check-square");
+                            } else {
+                                icon.classList.remove("fa-check-square");
+                                icon.classList.add("fa-square");
+                            }
+                        }
+                    });
+                }
+
+                return menu;
+            };
+            //Create Date Editor
+            var dateEditor = function (cell, onRendered, success, cancel) {
+                //cell - the cell component for the editable cell
+                //onRendered - function to call when the editor has been rendered
+                //success - function to call to pass the successfuly updated value to Tabulator
+                //cancel - function to call to abort the edit and return to a normal cell
+
+                //create and style input
+                var cellValue = luxon.DateTime.fromFormat(cell.getValue(), "dd/MM/yyyy").toFormat("yyyy-MM-dd"),
+                        input = document.createElement("input");
+
+                input.setAttribute("type", "date");
+
+                input.style.padding = "4px";
+                input.style.width = "100%";
+                input.style.boxSizing = "border-box";
+
+                input.value = cellValue;
+
+                onRendered(function () {
+                    input.focus();
+                    input.style.height = "100%";
+                });
+
+                function onChange() {
+                    if (input.value != cellValue) {
+                        success(luxon.DateTime.fromFormat(input.value, "yyyy-MM-dd").toFormat("dd/MM/yyyy"));
+                    } else {
+                        cancel();
+                    }
+                }
+
+                //submit new value on blur or change
+                input.addEventListener("blur", onChange);
+
+                //submit new value on enter
+                input.addEventListener("keydown", function (e) {
+                    if (e.keyCode == 13) {
+                        onChange();
+                    }
+
+                    if (e.keyCode == 27) {
+                        cancel();
+                    }
+                });
+
+                return input;
+            };
+
+            var footer = document.getElementById('example-footer');
+            var table = new Tabulator("#example-table", {
+                locale: "zh-cn",
+                height: 230,
+                layout: "fitColumns",
+                rowContextMenu: rowMenu, //add context menu to rows
+                pagination: true, //enable pagination
+                paginationMode: "remote", //enable remote pagination
+                paginationSize: 5,
+                paginationInitialPage: 1,
+                ajaxURL: "ajaxfile.php", //set url for ajax request
+                ajaxRequesting: function (url, params) {
+                    console.log(table.getData());
+                    console.log(table.getEditedCells());
+                    let rowSet = new Set();
+                    table.getEditedCells().forEach(function (cell) {
+                        rowSet.add(cell.getRow());
+                    });
+                    for (let row of rowSet) {
+                        console.log(row.getData());
+                    }
+                    table.clearHistory();
+                },
+                paginationSizeSelector: true,
+                //paginationSizeSelector: [5, 10, 15],
+                //paginationButtonCount: 2,
+                tooltips: true,
+                history: true,
+                printAsHtml: true,
+                printHeader: "<h1>Example Table Header<h1>",
+                printFooter: "<h2>Example Table Footer<h2>",
+                langs: {
+                    "zh-cn": {
+                        "pagination": {
+                            "first": "|<最前页",
+                            "first_title": "|<最前页",
+                            "last": "最后页>|",
+                            "last_title": "最后页>|",
+                            "prev": "<前一页",
+                            "prev_title": "<前一页",
+                            "next": "后一页>",
+                            "next_title": "后一页>",
+                            "all": "所有",
+                            "page_size": "每页行数",
+                        },
+                    },
+                },
+
+                columns: [
+                    {formatter: "rowSelection", titleFormatter: "rowSelection", headerSort: false, cellClick: function (e, cell) {
+                            cell.getRow().toggleSelect();
+                        }},
+                    {
+                        title: "emp_name",
+                        field: "emp_name",
+                        sorter: "string",
+                        headerFilter: "input",
+                        editor: "input",
+                    },
+                    {
+                        title: "email",
+                        field: "email",
+                        sorter: "string",
+                        headerFilter: "input",
+                        editor: "input", },
+                    {
+                        title: "gender",
+                        field: "gender",
+                        sorter: "string",
+                        headerFilter: "input",
+                        editor: "select",
+                        editorParams: {
+                            values: {
+                                "male": "male",
+                                "female": "female",
+                            }},
+                    },
+                    {
+                        title: "salary",
+                        field: "salary",
+                        sorter: "string",
+                        headerFilter: "input",
+                        editor: "input", },
+                    {
+                        title: "city",
+                        field: "city",
+                        sorter: "string",
+                        headerFilter: "input",
+                        editor: "input",
+                    },
+                ],
+
+            });
+            //trigger download of data.csv file
+            document.getElementById("download-csv").addEventListener("click", function () {
+                table.download("csv", "data.csv");
+            });
+
+//trigger download of data.json file
+            document.getElementById("download-json").addEventListener("click", function () {
+                table.download("json", "data.json");
+            });
+
+//trigger download of data.xlsx file
+            document.getElementById("download-xlsx").addEventListener("click", function () {
+                table.download("xlsx", "data.xlsx", {sheetName: "My Data"});
+            });
+
+//trigger download of data.pdf file
+            document.getElementById("download-pdf").addEventListener("click", function () {
+                table.download("pdf", "data.pdf", {
+                    orientation: "portrait", //set page orientation to portrait
+                    title: "Example Report", //add title to report
+                });
+            });
+
+//trigger download of data.html file
+            document.getElementById("download-html").addEventListener("click", function () {
+                table.download("html", "data.html", {style: true});
+            });
+            document.getElementById("save").addEventListener("click", function () {
+                console.log(table.getData());
+                console.log(table.getEditedCells());
+                let rowSet = new Set();
+                table.getEditedCells().forEach(function (cell) {
+                    rowSet.add(cell.getRow());
+                });
+                for (let row of rowSet) {
+                    console.log(row.getData());
+                }
+                table.clearHistory();
+            });
+//Add row on "Add Row" button click
+            document.getElementById("add-row").addEventListener("click", function () {
+                table.addRow({});
+            });
+
+//Delete row on "Delete Row" button click
+            document.getElementById("del-row").addEventListener("click", function () {
+                table.getSelectedRows().forEach(function (row) {
+                    row.delete();
+                });
+            });
+
+//Clear table on "Empty the table" button click
+            document.getElementById("clear").addEventListener("click", function () {
+                table.clearData()
+            });
+
+//Reset table contents on "Reset the table" button click
+            document.getElementById("reset").addEventListener("click", function () {
+                table.setData(tabledata);
+            });
+            //undo button
+            document.getElementById("history-undo").addEventListener("click", function () {
+                table.undo();
+            });
+
+//redo button
+            document.getElementById("history-redo").addEventListener("click", function () {
+                table.redo();
+            });
+            //print button
+            document.getElementById("print-table").addEventListener("click", function () {
+                table.print(false, true);
+            });
+            document.getElementById("example-table").addEventListener("page-changed	", function () {
+                console.log(table.getPage());
+                console.log(table.getPageMax());
+            });
+        </script>
+    </body>
+
+</html>
